@@ -1,0 +1,4 @@
+/forge-go
+*.test
+*.out
+bin/

@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package forge.v1;
+
+option go_package = "github.com/VoxellInc/forge-go/internal/forgev1;forgev1";
+
+// EmbedService provides embedding inference via gRPC.
+service EmbedService {
+  // Embed returns vector embeddings for a batch of texts.
+  rpc Embed(EmbedRequest) returns (EmbedResponse);
+
+  // Health returns engine liveness, loaded models, and uptime.
+  rpc Health(HealthRequest) returns (HealthResponse);
+}
+
+message EmbedRequest {
+  repeated string texts = 1;
+  string model = 2;       // "turbo", "pro", "ultra"
+  int32 dim = 3;          // MRL truncation dimension (0 = native)
+  string request_id = 4;  // trace correlation
+  string input_type = 5;  // "query" or "document"
+}
+
+message EmbedResponse {
+  repeated Embedding embeddings = 1;
+  int32 total_tokens = 2;
+  string model = 3;
+  int32 dim = 4;
+  int64 latency_ms = 5;
+  string request_id = 6;
+}
+
+message Embedding {
+  repeated float values = 1;
+}
+
+message HealthRequest {}
+
+message HealthResponse {
+  string status = 1;
+  repeated string models = 2;
+  int64 uptime_seconds = 3;
+}
