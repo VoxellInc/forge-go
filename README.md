@@ -1,6 +1,11 @@
 # forge-go
 
-Go client for [**Forge**](https://voxell.ai/forge) — Voxell's hosted text-embedding API.
+Go client for [**Forge**](https://voxell.ai/forge), Voxell's hosted text-embedding API.
+
+Voxell's Ingot-8B-R3 ranks #1 for English on the public MTEB leaderboard (English v2), with a 75.98
+mean task score across 41 tasks. It is the top usable English embedding model. See the
+[model card](https://huggingface.co/JCorners/Ingot-8B-R3), or try Forge with no signup on the
+[playground](https://playground.voxell.ai).
 
 Native **gRPC + protobuf** transport with **mutual-TLS** auth — not HTTP/JSON. Embedding responses
 are dense float arrays; protobuf packs them as binary (4 bytes/float) instead of JSON text, so the
@@ -56,7 +61,7 @@ func main() {
 | ----- | --- | ----- |
 | `turbo` | 1024 | fast, low cost (default) |
 | `pro` | 2560 | |
-| `ultra` | 4096 | Qwen3-Embedding-8B; ~75+ avg task score on MTEB, currently #4 on MTEB (English) |
+| `ultra` | 4096 | highest quality |
 
 ### Matryoshka (shorter vectors)
 
