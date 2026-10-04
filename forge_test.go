@@ -16,24 +16,38 @@ func TestNoCredentialsErrors(t *testing.T) {
 	}
 }
 
+// An API key without Insecure and without a client certificate is not enough:
+// the hosted endpoint requires mutual TLS.
+func TestAPIKeyWithoutCertOrInsecureErrors(t *testing.T) {
+	if _, err := forge.NewClient(forge.Options{Address: "x:1", APIKey: "k"}); err == nil {
+		t.Fatal("expected error with an API key but no certificate and Insecure unset")
+	}
+}
+
 func homeForge(f string) string {
 	h, _ := os.UserHomeDir()
 	return filepath.Join(h, ".forge", f)
 }
 
-// liveClient dials the hosted endpoint with the local ~/.forge mTLS certs.
-// Skips when certs are absent (CI / other machines).
+// liveClient dials the hosted endpoint with the local ~/.forge client
+// certificate and the API key in FORGE_API_KEY. Skips when either is absent
+// (CI / other machines).
 func liveClient(t *testing.T) *forge.Client {
 	t.Helper()
 	cert := homeForge("client.crt")
 	if _, err := os.Stat(cert); err != nil {
 		t.Skip("no ~/.forge/client.crt — skipping live gRPC test")
 	}
+	key := os.Getenv("FORGE_API_KEY")
+	if key == "" {
+		t.Skip("FORGE_API_KEY not set — skipping live gRPC test")
+	}
 	c, err := forge.NewClient(forge.Options{
 		Address:  forge.DefaultAddress,
 		CertFile: cert,
 		KeyFile:  homeForge("client.key"),
 		CAFile:   homeForge("voxell-ca.crt"),
+		APIKey:   key,
 	})
 	if err != nil {
 		t.Fatalf("NewClient: %v", err)

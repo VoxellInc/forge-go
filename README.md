@@ -7,10 +7,10 @@ mean task score across 41 tasks. It is the top usable English embedding model. S
 [model card](https://huggingface.co/JCorners/Ingot-8B-R3), or try Forge with no signup on the
 [playground](https://playground.voxell.ai).
 
-Native **gRPC + protobuf** transport with **mutual-TLS** auth — not HTTP/JSON. Embedding responses
+Native **gRPC + protobuf** transport over **mutual TLS** — not HTTP/JSON. Embedding responses
 are dense float arrays; protobuf packs them as binary (4 bytes/float) instead of JSON text, so the
-vector payload is smaller and parses faster. Auth is cert-based (client certificates), not a
-long-lived bearer token on the wire.
+vector payload is smaller and parses faster. A client certificate identifies the connection and
+your API key authorizes each request.
 
 ## Install
 
@@ -27,16 +27,18 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 
 	forge "github.com/VoxellInc/forge-go"
 )
 
 func main() {
 	c, err := forge.NewClient(forge.Options{
-		Address:  forge.DefaultAddress, // forge-control.fly.dev:50052
+		Address:  forge.DefaultAddress, // edge.voxell.ai:8443
 		CertFile: "~/.forge/client.crt",
 		KeyFile:  "~/.forge/client.key",
 		CAFile:   "~/.forge/voxell-ca.crt",
+		APIKey:   os.Getenv("FORGE_API_KEY"),
 	})
 	if err != nil {
 		log.Fatal(err)
@@ -71,10 +73,16 @@ res, _ := c.Embed(ctx, texts, forge.WithModel("turbo"), forge.WithDim(256)) // r
 
 ## Authentication
 
-- **mTLS (hosted endpoint):** provision a client certificate with the Forge CLI
+The hosted endpoint (`edge.voxell.ai:8443`) takes a client certificate and an API key together.
+
+- **Client certificate (mutual TLS):** provision one with the Forge CLI
   (`forge-cli auth init --api-key <KEY>` writes `~/.forge/{client.crt,client.key,voxell-ca.crt}`),
-  then point `Options` at those files.
-- **API key (local/plaintext gRPC bridge):** set `APIKey` + `Insecure: true`.
+  then point `Options` at those files. It identifies the connection. Certificates last 90 days;
+  re-run `auth init` to renew.
+- **API key:** set `APIKey`. It is sent as a bearer token in request metadata, inside the TLS
+  channel, and authorizes each request.
+
+For a local plaintext gRPC endpoint, set `APIKey` + `Insecure: true` and no certificate.
 
 ## License
 

@@ -2,6 +2,9 @@ module github.com/VoxellInc/forge-go
 
 go 1.25.0
 
+// Default endpoint is retired. Use v0.1.2 or later.
+retract [v0.1.0, v0.1.1]
+
 require (
 	google.golang.org/grpc v1.81.1
 	google.golang.org/protobuf v1.36.11
