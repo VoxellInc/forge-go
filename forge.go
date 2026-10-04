@@ -93,7 +93,7 @@ type Client struct {
 type EmbedResult struct {
 	Embeddings [][]float32
 	Tokens     int32
-	Model      string
+	Model      string // the tier that was requested: "turbo", "pro" or "ultra"
 	Dim        int32
 	LatencyMs  int64
 }
@@ -207,7 +207,7 @@ func (c *Client) Embed(ctx context.Context, texts []string, opts ...EmbedOption)
 	return &EmbedResult{
 		Embeddings: out,
 		Tokens:     resp.TotalTokens,
-		Model:      resp.Model,
+		Model:      req.Model,
 		Dim:        resp.Dim,
 		LatencyMs:  resp.LatencyMs,
 	}, nil

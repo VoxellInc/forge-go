@@ -85,7 +85,7 @@ func (r *recorder) Embed(ctx context.Context, req *forgev1.EmbedRequest) (*forge
 	return &forgev1.EmbedResponse{
 		Embeddings:  out,
 		TotalTokens: int32(3 * len(req.Texts)),
-		Model:       req.Model,
+		Model:       "label-from-server",
 		Dim:         int32(dim),
 		LatencyMs:   7,
 		RequestId:   req.RequestId,
