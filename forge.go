@@ -2,17 +2,20 @@
 //
 // It speaks the native gRPC + protobuf transport (not HTTP/JSON): embedding
 // responses are dense float arrays, which protobuf packs as binary rather than
-// JSON text, so payloads are smaller and parse faster. Auth is mutual TLS
-// (client certificates) for the hosted endpoint, with an API-key fallback for
-// local/plaintext gRPC.
+// JSON text, so payloads are smaller and parse faster.
+//
+// The hosted endpoint uses mutual TLS and an API key together: the client
+// certificate identifies the connection and the API key authorizes each
+// request. A local plaintext gRPC endpoint takes the API key alone.
 //
 // Example:
 //
 //	c, err := forge.NewClient(forge.Options{
-//		Address:  "forge-control.fly.dev:50052",
+//		Address:  forge.DefaultAddress,
 //		CertFile: "~/.forge/client.crt",
 //		KeyFile:  "~/.forge/client.key",
 //		CAFile:   "~/.forge/voxell-ca.crt",
+//		APIKey:   os.Getenv("FORGE_API_KEY"),
 //	})
 //	if err != nil { log.Fatal(err) }
 //	defer c.Close()
@@ -48,21 +51,30 @@ const (
 	AuthAPIKey AuthMethod = "api_key"
 )
 
-// DefaultAddress is the hosted Forge control-plane gRPC endpoint.
-const DefaultAddress = "forge-control.fly.dev:50052"
+// DefaultAddress is the hosted Forge gRPC endpoint. It requires mutual TLS.
+const DefaultAddress = "edge.voxell.ai:8443"
 
-// Options configures a Client. Provide either mTLS cert files (hosted endpoint)
-// or an APIKey with Insecure=true (local/plaintext gRPC bridge).
+// Options configures a Client.
+//
+// Hosted endpoint: set CertFile, KeyFile and CAFile (mutual TLS) and APIKey.
+// The certificate identifies the connection; the API key authorizes each
+// request.
+//
+// Local plaintext gRPC endpoint: set APIKey and Insecure.
 type Options struct {
 	Address string // host:port; defaults to DefaultAddress
 
-	// mTLS (preferred, for the hosted endpoint):
+	// Client certificate and CA for mutual TLS (hosted endpoint).
 	CertFile string
 	KeyFile  string
 	CAFile   string
 
-	// API-key fallback (for a local/plaintext gRPC endpoint):
-	APIKey   string
+	// APIKey is sent as a bearer token in request metadata on every call,
+	// over mutual TLS as well as on a plaintext connection.
+	APIKey string
+
+	// Insecure dials without TLS. Use it only for a local endpoint; it
+	// requires APIKey.
 	Insecure bool
 
 	// DialTimeout bounds the initial connection (default 10s).
@@ -81,7 +93,7 @@ type Client struct {
 type EmbedResult struct {
 	Embeddings [][]float32
 	Tokens     int32
-	Model      string
+	Model      string // the tier that was requested: "turbo", "pro" or "ultra"
 	Dim        int32
 	LatencyMs  int64
 }
@@ -89,10 +101,10 @@ type EmbedResult struct {
 // Auth reports the authentication method negotiated at NewClient.
 func (c *Client) Auth() AuthMethod { return c.auth }
 
-// NewClient dials Forge with mTLS (if cert files are set) or an API key.
+// NewClient dials Forge over mutual TLS (if cert files are set) or, with
+// Insecure, over a plaintext connection authenticated by the API key alone.
 //
-// For hostname targets it prefers IPv6 (falling back to IPv4) to avoid shared
-// IPv4 cross-region routing.
+// For hostname targets it tries IPv6 first and falls back to IPv4.
 func NewClient(opts Options) (*Client, error) {
 	addr := opts.Address
 	if addr == "" {
@@ -112,7 +124,7 @@ func NewClient(opts Options) (*Client, error) {
 		}),
 	}
 
-	// Prefer IPv6 for hostname targets (raw IPs are left as-is).
+	// Try IPv6 first for hostname targets (raw IPs are left as-is).
 	if host, _, _ := net.SplitHostPort(addr); host != "" && net.ParseIP(host) == nil {
 		dialOpts = append(dialOpts, grpc.WithContextDialer(func(ctx context.Context, a string) (net.Conn, error) {
 			d := &net.Dialer{Timeout: timeout}
@@ -146,7 +158,7 @@ func NewClient(opts Options) (*Client, error) {
 		dialOpts = append(dialOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 		auth = AuthAPIKey
 	default:
-		return nil, fmt.Errorf("forge: no credentials — set CertFile/KeyFile/CAFile (mTLS) or APIKey with Insecure=true")
+		return nil, fmt.Errorf("forge: no credentials — set CertFile/KeyFile/CAFile with APIKey (hosted endpoint), or APIKey with Insecure=true (local endpoint)")
 	}
 
 	conn, err := grpc.NewClient(addr, dialOpts...)
@@ -184,10 +196,7 @@ func (c *Client) Embed(ctx context.Context, texts []string, opts ...EmbedOption)
 	for _, o := range opts {
 		o(req)
 	}
-	if c.auth == AuthAPIKey && c.apiKey != "" {
-		ctx = metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+c.apiKey)
-	}
-	resp, err := c.grpc.Embed(ctx, req)
+	resp, err := c.grpc.Embed(c.withAPIKey(ctx), req)
 	if err != nil {
 		return nil, err
 	}
@@ -198,7 +207,7 @@ func (c *Client) Embed(ctx context.Context, texts []string, opts ...EmbedOption)
 	return &EmbedResult{
 		Embeddings: out,
 		Tokens:     resp.TotalTokens,
-		Model:      resp.Model,
+		Model:      req.Model,
 		Dim:        resp.Dim,
 		LatencyMs:  resp.LatencyMs,
 	}, nil
@@ -206,11 +215,20 @@ func (c *Client) Embed(ctx context.Context, texts []string, opts ...EmbedOption)
 
 // Health reports engine liveness, loaded models, and uptime.
 func (c *Client) Health(ctx context.Context) (status string, models []string, uptimeSeconds int64, err error) {
-	resp, err := c.grpc.Health(ctx, &forgev1.HealthRequest{})
+	resp, err := c.grpc.Health(c.withAPIKey(ctx), &forgev1.HealthRequest{})
 	if err != nil {
 		return "", nil, 0, err
 	}
 	return resp.Status, resp.Models, resp.UptimeSeconds, nil
+}
+
+// withAPIKey attaches the API key as a bearer token. The hosted endpoint
+// authorizes every call by API key, including calls made over mutual TLS.
+func (c *Client) withAPIKey(ctx context.Context) context.Context {
+	if c.apiKey == "" {
+		return ctx
+	}
+	return metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+c.apiKey)
 }
 
 // Close releases the underlying connection.
