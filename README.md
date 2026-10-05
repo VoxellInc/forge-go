@@ -9,13 +9,13 @@ mean task score across 41 tasks. It is the top usable English embedding model. S
 
 Voxell also publishes retrieval receipts measured on four public corpora: SEC filings (2,010
 documents), USPTO patents (4,008), NASA technical reports (1,210) and arXiv technical papers (589).
-That is 7,817 documents and 980,885 passages, with 200 questions per corpus, measured 2026-10-02.
-Across the 800 questions the first result answers the question for 85% (SEC 91%, arXiv 92%, patents
-86.5%, NASA 72%), one of the top three results answers it for 91% (95%, 98%, 92%, 80%), and the
-right document is in the top ten for 95%. The questions were written by a model from the documents
-and judged against the passage text, which is easier than a human test set. The figures describe
-what the full retrieval pipeline does on these corpora, not the embedding call this client makes,
-and they are not a comparison with any other vendor.
+That is 7,817 documents and 980,885 passages, with 200 questions per corpus, measured 2026-10-05.
+Across the 800 questions the first result answers the question for 83% (SEC 91%, arXiv 86.5%,
+patents 86.5%, NASA 67%), one of the top three results answers it for 90% (95%, 96%, 91.5%, 78%),
+and the right document is in the top ten for 95%. The questions were written by a model from the
+documents and judged against the passage text, which is easier than a human test set. The figures
+describe what the full retrieval pipeline does on these corpora, not the embedding call this client
+makes, and they are not a comparison with any other vendor.
 [Read the receipts](https://voxell.ai/retrieval/).
 
 Native **gRPC + protobuf** transport over **mutual TLS** — not HTTP/JSON. Embedding responses
